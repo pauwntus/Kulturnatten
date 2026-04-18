@@ -410,7 +410,8 @@ function toggleFav(idx, e) {
   if (i >= 0) favs.splice(i, 1); else favs.push(id);
   saveFavs(favs);
   if (activeFilters.has('favs')) { render(); return; }
-  e.currentTarget.classList.toggle('is-fav', favs.includes(id));
+  const btn = e.target.closest('.fav-btn');
+  if (btn) btn.classList.toggle('is-fav', favs.includes(id));
 }
 
 function shareFavs() {
