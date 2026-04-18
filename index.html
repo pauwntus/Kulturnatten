@@ -480,7 +480,6 @@ document.getElementById('searchInput').addEventListener('input', render);
 stationSel.addEventListener('change', render);
 document.getElementById('timeFilter').addEventListener('change', render);
 document.getElementById('sortSelect').addEventListener('change', render);
-render();
 // ─── Favourites ──────────────────────────────────────────────────────────────
 const FAVS_KEY = 'kulturnatten_favs';
 const getFavs  = () => JSON.parse(localStorage.getItem(FAVS_KEY) || '[]');
@@ -670,6 +669,7 @@ async function openMapAt(address) {
   }
 }
 
+render();
 </script>
 </body>
 </html>
