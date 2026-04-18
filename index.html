@@ -261,11 +261,12 @@
   </select>
   <select id="timeFilter">
     <option value="">Hela kvällen</option>
-    <option value="18">Öppet kl 18</option>
-    <option value="19">Öppet kl 19</option>
-    <option value="20">Öppet kl 20</option>
-    <option value="21">Öppet kl 21</option>
-    <option value="late">Öppet efter 22</option>
+    <option value="17">17–18</option>
+    <option value="18">18–19</option>
+    <option value="19">19–20</option>
+    <option value="20">20–21</option>
+    <option value="21">21–22</option>
+    <option value="22">22–23</option>
   </select>
   <select id="scoreFilter">
     <option value="0">Alla poäng</option>
@@ -344,20 +345,18 @@ function render() {
     if (qRe && !qRe.test(ev.search_text)) return false;
     if (sta && !(AREAS[sta]||[]).includes(ev.station)) return false;
     if (tf) {
-      const open  = timeNum(ev.opens);
-      const close = timeNum(ev.closes);
-      if (tf === 'late') {
-        if (close < 22*60 && close !== 0) return false;
-      } else {
-        const h = parseInt(tf), hS = h*60, hE = (h+1)*60;
-        const evOpen = open <= hE && (close === 0 || close > hS);
-        const subOpen = (ev.program||[]).some(p => {
+      const h = parseInt(tf), hS = h*60, hE = (h+1)*60;
+      if (ev.program?.length) {
+        const subOpen = ev.program.some(p => {
           const parts = (p.time||'').match(/(\d+:\d+)/g);
           if (!parts) return false;
           const ps = timeNum(parts[0]), pe = parts[1] ? timeNum(parts[1]) : ps+60;
           return ps < hE && pe > hS;
         });
-        if (!evOpen && !subOpen) return false;
+        if (!subOpen) return false;
+      } else {
+        const open = timeNum(ev.opens), close = timeNum(ev.closes);
+        if (!(open <= hE && (close === 0 || close > hS))) return false;
       }
     }
     if (activeFilters.has('outdoor') && !isOutdoor(ev)) return false;
