@@ -170,9 +170,30 @@
     font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.08em; color: #818cf8; margin-bottom: 8px;
   }
-  .prog-item { display: flex; gap: 10px; margin-bottom: 7px; font-size: 0.8rem; }
-  .prog-time { color: #38bdf8; font-weight: 700; white-space: nowrap; min-width: 95px; }
-  .prog-desc { color: #c0b0d8; line-height: 1.4; }
+  .prog-item {
+    display: flex; gap: 10px; margin-bottom: 6px; font-size: 0.8rem;
+    background: #0f0f25; border-radius: 7px; padding: 7px 10px;
+    border-left: 3px solid #2a2a50; align-items: flex-start;
+  }
+  .prog-item.prog-now {
+    border-left-color: #4ade80; background: #081510;
+  }
+  .prog-item.prog-now .prog-time { color: #4ade80; }
+  .prog-item.prog-now .prog-now-label {
+    font-size: 0.68rem; font-weight: 700; color: #4ade80;
+    background: #0d2a18; border: 1px solid #1a5030; border-radius: 20px;
+    padding: 1px 7px; white-space: nowrap; flex-shrink: 0; align-self: center;
+  }
+  .prog-item.prog-past { opacity: 0.4; }
+  .prog-time { color: #38bdf8; font-weight: 700; white-space: nowrap; min-width: 90px; }
+  .prog-desc { color: #c0b0d8; line-height: 1.4; flex: 1; }
+  details.past-details { margin-top: 4px; }
+  details.past-details summary {
+    font-size: 0.75rem; color: #4a4a80; cursor: pointer; list-style: none;
+    padding: 4px 2px; user-select: none;
+  }
+  details.past-details summary::-webkit-details-marker { display: none; }
+  details.past-details[open] summary { color: #818cf8; margin-bottom: 6px; }
   .extra-info { margin-top: 9px; font-size: 0.78rem; color: #8080a8; font-style: italic; line-height: 1.4; }
   .address-row { margin-top: 9px; font-size: 0.75rem; color: #5a5a90; }
 
@@ -304,8 +325,11 @@ function timeNum(t) {
 
 const isOutdoor = ev => (ev.score_breakdown?.utomhus || 0) >= 7;
 const isRare    = ev => (ev.score_breakdown?.sallan_oppet || 0) >= 5;
+const getNowMins = () => { const n = new Date(); return n.getHours()*60 + n.getMinutes(); };
 
 function render() {
+  const expanded = new Set([...document.querySelectorAll('.card[data-idx]')]
+    .filter(c => c.classList.contains('expanded')).map(c => +c.dataset.idx));
   const q   = document.getElementById('searchInput').value.toLowerCase().trim();
   const sta = areaSel.value;
   const tf  = document.getElementById('timeFilter').value;
@@ -368,15 +392,31 @@ function render() {
     if ((bd.utomhus||0)     >= 7) tags.push(`<span class="stag stag-utomhus">🌿 Utomhus +${bd.utomhus}</span>`);
     if ((bd.sallan_oppet||0)>= 5) tags.push(`<span class="stag stag-rare">🔑 Sällan öppet +${bd.sallan_oppet}</span>`);
 
-    const progHtml = ev.program?.length ? `
-      <div class="program-section"><h4>Program</h4>
-        ${ev.program.map(p=>`<div class="prog-item">
-          <span class="prog-time">${p.time}</span>
-          <span class="prog-desc">${p.desc}</span>
-        </div>`).join('')}
-      </div>` : '';
+    let progHtml = '';
+    if (ev.program?.length) {
+      const nowMins = getNowMins();
+      const classified = ev.program.map(p => {
+        const pts = (p.time||'').match(/(\d+:\d+)/g) || [];
+        const ps = pts[0] ? timeNum(pts[0]) : -1;
+        const pe = pts[1] ? timeNum(pts[1]) : (ps >= 0 ? ps + 60 : -1);
+        const isPast = pe >= 0 && pe <= nowMins;
+        const isNow  = !isPast && ps >= 0 && ps <= nowMins;
+        return { p, ps, pe, isPast, isNow };
+      });
+      const mkItem = x => `<div class="prog-item${x.isNow?' prog-now':x.isPast?' prog-past':''}" data-ps="${x.ps}" data-pe="${x.pe}">
+          <span class="prog-time">${x.p.time}</span>
+          ${x.isNow ? '<span class="prog-now-label">P\u00e5g\u00e5r nu</span>' : ''}
+          <span class="prog-desc">${x.p.desc}</span>
+        </div>`;
+      const present = classified.filter(x => !x.isPast);
+      const past    = classified.filter(x => x.isPast);
+      const pastSection = past.length
+        ? `<details class="past-details"><summary onclick="event.stopPropagation()">\u25b8 ${past.length} passerade</summary>${past.map(mkItem).join('')}</details>`
+        : '';
+      progHtml = `<div class="program-section"><h4>Program</h4>${present.map(mkItem).join('')}${pastSection}</div>`;
+    }
 
-    return `<div class="card" onclick="this.classList.toggle('expanded')">
+    return `<div class="card" data-idx="${ev._idx}" onclick="this.classList.toggle('expanded')">
       <div class="score-row">
         <div class="score-bar-wrap"><div class="score-bar" style="width:${pct}%"></div></div>
         <span class="score-num">${ev.score}p</span>
@@ -397,7 +437,28 @@ function render() {
       ${ev.address?`<div class="address-row"><a class="addr-link" href="https://maps.google.com/?q=${encodeURIComponent(ev.address + ', Stockholm')}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📮 ${ev.address}</a></div>`:''}
     </div>`;
   }).join('');
+  expanded.forEach(idx => {
+    const c = grid.querySelector(`[data-idx="${idx}"]`);
+    if (c) c.classList.add('expanded');
+  });
 }
+
+function updateProgStates() {
+  const n = getNowMins();
+  document.querySelectorAll('.prog-item[data-ps]').forEach(el => {
+    const ps = +el.dataset.ps, pe = +el.dataset.pe;
+    const isNow  = ps >= 0 && ps <= n && !(pe >= 0 && pe <= n);
+    const isPast = pe >= 0 && pe <= n;
+    el.classList.toggle('prog-now',  isNow);
+    el.classList.toggle('prog-past', isPast);
+    let lbl = el.querySelector('.prog-now-label');
+    if (isNow && !lbl) {
+      lbl = document.createElement('span'); lbl.className = 'prog-now-label'; lbl.textContent = 'Pågår nu';
+      el.querySelector('.prog-time').after(lbl);
+    } else if (!isNow && lbl) lbl.remove();
+  });
+}
+setInterval(updateProgStates, 60_000);
 
 document.getElementById('searchInput').addEventListener('input', render);
 areaSel.addEventListener('change', render);
