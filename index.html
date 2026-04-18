@@ -176,13 +176,18 @@
   .extra-info { margin-top: 9px; font-size: 0.78rem; color: #8080a8; font-style: italic; line-height: 1.4; }
   .address-row { margin-top: 9px; font-size: 0.75rem; color: #5a5a90; }
 
+  .grid.compact { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+  .grid.compact .card { padding: 12px; }
+  .grid.compact .desc,
+  .grid.compact .program-section,
+  .grid.compact .extra-info,
+  .grid.compact .address-row { display: none !important; }
+  .grid.compact .card.expanded .desc,
+  .grid.compact .card.expanded .program-section,
+  .grid.compact .card.expanded .extra-info,
+  .grid.compact .card.expanded .address-row { display: block !important; }
   .no-results { text-align: center; padding: 80px 20px; color: #5050a0; grid-column: 1 / -1; }
   .no-results h2 { font-size: 2rem; margin-bottom: 8px; }
-  mark.hl         { background: rgba(192,132,252,0.28); border-radius: 2px; color: inherit; }
-  mark.hl-konst   { background: rgba(192,132,252,0.22); border-radius: 2px; color: #e4b8ff; font-weight: 600; }
-  mark.hl-mat     { background: rgba(251,146,60,0.20);  border-radius: 2px; color: #fdb97a; font-weight: 600; }
-  mark.hl-utomhus { background: rgba(74,222,128,0.18);  border-radius: 2px; color: #86efac; font-weight: 600; }
-  mark.hl-rare    { background: rgba(250,204,21,0.18);  border-radius: 2px; color: #fde68a; font-weight: 600; }
 
   .fav-btn {
     background: none; border: none; cursor: pointer;
@@ -224,12 +229,20 @@
   <select id="stationFilter"><option value="">Alla stationer</option></select>
   <select id="timeFilter">
     <option value="">Hela kvällen</option>
-    <option value="18">Börjar 18–19</option>
-    <option value="19">Börjar 19–20</option>
-    <option value="20">Börjar 20–21</option>
-    <option value="21">Börjar 21+</option>
+    <option value="18">Öppet kl 18</option>
+    <option value="19">Öppet kl 19</option>
+    <option value="20">Öppet kl 20</option>
+    <option value="21">Öppet kl 21</option>
     <option value="late">Öppet efter 22</option>
   </select>
+  <select id="scoreFilter">
+    <option value="0">Alla poäng</option>
+    <option value="20">20p+</option>
+    <option value="30">30p+</option>
+    <option value="40">40p+</option>
+    <option value="50">50p+</option>
+  </select>
+  <button class="toggle-btn" id="compactBtn" onclick="toggleCompact()">☰ Kompakt</button>
   <button class="toggle-btn" id="outdoorBtn" onclick="toggleFilter('outdoor')">🌿 Utomhus</button>
   <button class="toggle-btn" id="rareBtn"    onclick="toggleFilter('rare')">🔑 Sällan öppet</button>
   <button class="toggle-btn" id="favsBtn"    onclick="toggleFilter('favs')">★ Favoriter</button>
@@ -266,102 +279,6 @@ function toggleFilter(name) {
   render();
 }
 
-// Nyckelord per intressekategori
-const INTEREST_KEYWORDS = {
-  konst: [
-    'vernissage','utställning','utställningar','konstinstallation','konstverk','konstverken',
-    'skulptur','skulpturer','fotografi','fotografier','måleri','keramik','galleri',
-    'konstnär','konstnären','konstnärer','installation','installationer',
-    'design','arkitektur','grafik','teckning','teckningar','målningar','målning',
-    'konstfilm','konstfilmer','utstallning','utstallningar','konstverk',
-    'kons­thall','konsthall','stadskonst','gatukonstnär','textilkonst','mosaic','mosaik',
-    'ateljer','ateljé','ateljéer','bakom kulisserna','magasin','depot','samling','samlingar',
-    'guidad visning','guidade visningar','guidad tur'
-  ],
-  mat: [
-    'bar','baren','barer','café','kaffe','dryck','drink','drinks','öl','vin',
-    'serverar','mat','restaurang','mingel','fika','smörgås','smörrebröd',
-    'korv','pizza','tapas','cocktail','cocktails','bubbel','spritmuseum',
-    'fullständiga rättigheter','fullstandiga','maten','dricka','bjuder på','bjuder pa'
-  ],
-  utomhus: [
-    'innergård','innergården','utomhus','park','torg','trädgård','trädgården',
-    'gård','gården','terrass','terassen','kajpromenad','kaj','strand','skog',
-    'borggård','borggården','slottsgården','skeppsgård','skeppsgården',
-    'innegård','uteplats','naturen','promenad','vandring','vandringar',
-    'garden','gard'
-  ],
-  rare: [
-    'vernissage','förhandsvisning','förhandsvisningar','arkiv','magasin',
-    'ateljé','ateljéer','bakom kulisserna','normalt stängt','normalt stangd',
-    'unik möjlighet','unik chans','sällan','sallan','exklusiv','exklusivt',
-    'depot','privatvisning','premiär','invigning','för första gången',
-    'för forsta gangen','öppnar dörrarna','oppnar dorrarna','öppnar sina dörrar',
-    'öppnar portarna','speciellt','öppnar för','specialvisning'
-  ]
-};
-
-// Bygg regex per kategori (case-insensitive, ordgräns)
-const INTEREST_RE = {};
-for (const [cat, words] of Object.entries(INTEREST_KEYWORDS)) {
-  const sorted = [...words].sort((a,b) => b.length - a.length); // längst först
-  const escaped = sorted.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  INTEREST_RE[cat] = new RegExp(`(${escaped.join('|')})`, 'gi');
-}
-
-// Applicera intresse-highlights + sökning utan att krocka
-function hlInterests(text, q) {
-  if (!text) return '';
-
-  // Samla alla träffar: [start, end, klass]
-  const hits = [];
-
-  for (const [cat, re] of Object.entries(INTEREST_RE)) {
-    re.lastIndex = 0;
-    let m;
-    while ((m = re.exec(text)) !== null) {
-      hits.push([m.index, m.index + m[0].length, 'hl-' + cat]);
-    }
-  }
-
-  // Sökträff
-  if (q) {
-    const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const qre = new RegExp(`(?<![\\wåäöÅÄÖ])${esc}(?![\\wåäöÅÄÖ])`, 'gi');
-    let m;
-    while ((m = qre.exec(text)) !== null) {
-      hits.push([m.index, m.index + m[0].length, 'hl']);
-    }
-  }
-
-  if (!hits.length) return text;
-
-  // Sortera, ta bort överlappningar (sökträff prioriteras, annars längst)
-  hits.sort((a,b) => a[0]-b[0] || b[1]-b[0]-(a[1]-a[0]));
-  const merged = [];
-  let end = -1;
-  for (const h of hits) {
-    if (h[0] >= end) { merged.push(h); end = h[1]; }
-    else if (h[2] === 'hl' && merged.length) {
-      // Sökträff har prioritet – ersätt sista om den överlappar
-      merged[merged.length-1] = h; end = h[1];
-    }
-  }
-
-  // Bygg resultatsträngen
-  let out = '', pos = 0;
-  for (const [s, e, cls] of merged) {
-    out += text.slice(pos, s);
-    out += `<mark class="${cls}">${text.slice(s, e)}</mark>`;
-    pos = e;
-  }
-  out += text.slice(pos);
-  return out;
-}
-
-function hl(text, q) {
-  return hlInterests(text, q);
-}
 
 function timeNum(t) {
   if (!t) return 0;
@@ -380,16 +297,27 @@ function render() {
 
   const qRe = q ? new RegExp(`(?<![\\wåäöÅÄÖ])${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\wåäöÅÄÖ])`, 'i') : null;
 
+  const minScore = parseInt(document.getElementById('scoreFilter').value) || 0;
+
   let list = EVENTS.filter(ev => {
+    if (ev.score < minScore) return false;
     if (qRe && !qRe.test(ev.search_text)) return false;
     if (sta && ev.station !== sta) return false;
     if (tf) {
       const open  = timeNum(ev.opens);
       const close = timeNum(ev.closes);
-      if (tf === 'late') { if (close < 22*60 && close !== 0) return false; }
-      else {
-        const h = parseInt(tf);
-        if (open < h*60 || open >= (h+1)*60) return false;
+      if (tf === 'late') {
+        if (close < 22*60 && close !== 0) return false;
+      } else {
+        const h = parseInt(tf), hS = h*60, hE = (h+1)*60;
+        const evOpen = open <= hE && (close === 0 || close > hS);
+        const subOpen = (ev.program||[]).some(p => {
+          const parts = (p.time||'').match(/(\d+:\d+)/g);
+          if (!parts) return false;
+          const ps = timeNum(parts[0]), pe = parts[1] ? timeNum(parts[1]) : ps+60;
+          return ps < hE && pe > hS;
+        });
+        if (!evOpen && !subOpen) return false;
       }
     }
     if (activeFilters.has('outdoor') && !isOutdoor(ev)) return false;
@@ -428,7 +356,7 @@ function render() {
       <div class="program-section"><h4>Program</h4>
         ${ev.program.map(p=>`<div class="prog-item">
           <span class="prog-time">${p.time}</span>
-          <span class="prog-desc">${hl(p.desc,q)}</span>
+          <span class="prog-desc">${p.desc}</span>
         </div>`).join('')}
       </div>` : '';
 
@@ -439,15 +367,15 @@ function render() {
         <button class="fav-btn${isFav(ev)?' is-fav':''}" onclick="toggleFav(${ev._idx},event)" title="Favoritmarkera">★</button>
       </div>
       <div class="score-tags">${tags.join('')}</div>
-      ${ev.venue?`<div class="venue">${hl(ev.venue,q)}</div>`:''}
-      <div class="card-title">${hl(ev.title||ev.venue,q)}</div>
+      ${ev.venue?`<div class="venue">${ev.venue}</div>`:''}
+      <div class="card-title">${ev.title||ev.venue}</div>
       <div class="meta">
         ${timeStr?`<span class="badge time">⏱ ${timeStr}</span>`:''}
-        ${ev.station?`<span class="badge loc">📍 ${hl(ev.station,q)}</span>`:''}
+        ${ev.station?`<span class="badge loc">📍 ${ev.station}</span>`:''}
         ${outdoor?`<span class="badge outdoor">🌿 Utomhus</span>`:''}
         ${rare?`<span class="badge rare">🔑 Sällan öppet</span>`:''}
       </div>
-      ${ev.description?`<div class="desc">${hl(ev.description,q)}</div>`:''}
+      ${ev.description?`<div class="desc">${ev.description}</div>`:''}
       ${progHtml}
       ${ev.extra_info?`<div class="extra-info">${ev.extra_info}</div>`:''}
       ${ev.address?`<div class="address-row"><a class="addr-link" href="https://maps.google.com/?q=${encodeURIComponent(ev.address + ', Stockholm')}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📮 ${ev.address}</a></div>`:''}
@@ -459,6 +387,13 @@ document.getElementById('searchInput').addEventListener('input', render);
 stationSel.addEventListener('change', render);
 document.getElementById('timeFilter').addEventListener('change', render);
 document.getElementById('sortSelect').addEventListener('change', render);
+document.getElementById('scoreFilter').addEventListener('change', render);
+
+function toggleCompact() {
+  const grid = document.getElementById('grid');
+  const on = grid.classList.toggle('compact');
+  document.getElementById('compactBtn').classList.toggle('active', on);
+}
 // ─── Favourites ──────────────────────────────────────────────────────────────
 const FAVS_KEY = 'kulturnatten_favs';
 const getFavs  = () => JSON.parse(localStorage.getItem(FAVS_KEY) || '[]');
