@@ -298,7 +298,7 @@ function hlInterests(text, q) {
   // Sökträff
   if (q) {
     const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const qre = new RegExp(esc, 'gi');
+    const qre = new RegExp(`(?<![\\wåäöÅÄÖ])${esc}(?![\\wåäöÅÄÖ])`, 'gi');
     let m;
     while ((m = qre.exec(text)) !== null) {
       hits.push([m.index, m.index + m[0].length, 'hl']);
@@ -349,8 +349,10 @@ function render() {
   const tf  = document.getElementById('timeFilter').value;
   const srt = document.getElementById('sortSelect').value;
 
+  const qRe = q ? new RegExp(`(?<![\\wåäöÅÄÖ])${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\wåäöÅÄÖ])`, 'i') : null;
+
   let list = EVENTS.filter(ev => {
-    if (q && !ev.search_text.includes(q)) return false;
+    if (qRe && !qRe.test(ev.search_text)) return false;
     if (sta && ev.station !== sta) return false;
     if (tf) {
       const open  = timeNum(ev.opens);
