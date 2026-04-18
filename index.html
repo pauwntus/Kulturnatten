@@ -226,7 +226,18 @@
     <span class="search-icon">🔍</span>
     <input type="text" id="searchInput" placeholder="Sök plats, aktivitet, konstnär…" autofocus>
   </div>
-  <select id="stationFilter"><option value="">Alla stationer</option></select>
+  <select id="areaFilter">
+    <option value="">Hela Stockholm</option>
+    <option value="gamlastan">Gamla stan &amp; Slussen</option>
+    <option value="city">City / Norrmalm</option>
+    <option value="vasastan">Vasastan</option>
+    <option value="ostermalm">Östermalm</option>
+    <option value="kungsholmen">Kungsholmen</option>
+    <option value="sodermalm">Södermalm</option>
+    <option value="djurgarden">Djurgården</option>
+    <option value="soderort">Söderort</option>
+    <option value="norrvastr">Norr &amp; Väster</option>
+  </select>
   <select id="timeFilter">
     <option value="">Hela kvällen</option>
     <option value="18">Öppet kl 18</option>
@@ -265,13 +276,18 @@ EVENTS.forEach((ev,i)=>{ev._idx=i;});
 let currentList = [];
 const activeFilters = new Set();
 
-const stations = [...new Set(EVENTS.map(e => e.station).filter(Boolean))].sort();
-const stationSel = document.getElementById('stationFilter');
-stations.forEach(s => {
-  const o = document.createElement('option');
-  o.value = s; o.textContent = s;
-  stationSel.appendChild(o);
-});
+const AREAS = {
+  gamlastan:   ['Gamla stan','Slussen','Kungsträdgården','Östermalmstorg'],
+  city:        ['T-Centralen','Centralen','Hötorget','Rådmansgatan','Radmansgatan','Odenplan'],
+  vasastan:    ['Sankt Eriksplan','Fridhemsplan'],
+  ostermalm:   ['Östermalmstorg','Karlaplan','Stadion','Tekniska högskolan','Gärdet','Ropsten','Lidingö'],
+  kungsholmen: ['Rådhuset','Radhuset','Thorildsplan','Kristineberg','Västra skogen'],
+  sodermalm:   ['Medborgarplatsen','Skanstull','Mariatorget','Zinkensdamm','Hornstull','Liljeholmen'],
+  djurgarden:  ['Djurgården','Skansen','Waldemarsudde'],
+  soderort:    ['Skärholmen','Skarholmen','Vårberg','Bredäng','Midsommarkransen','Telefonplan','Hägerstensåsen','Östberga'],
+  norrvastr:   ['Solna','Sundbyberg','Vällingby','Hässelby','Blackeberg','Brommaplan','Kista','Husby','Akalla','Barkarby','Jakobsberg']
+};
+const areaSel = document.getElementById('areaFilter');
 
 function toggleFilter(name) {
   activeFilters.has(name) ? activeFilters.delete(name) : activeFilters.add(name);
@@ -291,7 +307,7 @@ const isRare    = ev => (ev.score_breakdown?.sallan_oppet || 0) >= 5;
 
 function render() {
   const q   = document.getElementById('searchInput').value.toLowerCase().trim();
-  const sta = stationSel.value;
+  const sta = areaSel.value;
   const tf  = document.getElementById('timeFilter').value;
   const srt = document.getElementById('sortSelect').value;
 
@@ -302,7 +318,7 @@ function render() {
   let list = EVENTS.filter(ev => {
     if (ev.score < minScore) return false;
     if (qRe && !qRe.test(ev.search_text)) return false;
-    if (sta && ev.station !== sta) return false;
+    if (sta && !(AREAS[sta]||[]).includes(ev.station)) return false;
     if (tf) {
       const open  = timeNum(ev.opens);
       const close = timeNum(ev.closes);
@@ -384,7 +400,7 @@ function render() {
 }
 
 document.getElementById('searchInput').addEventListener('input', render);
-stationSel.addEventListener('change', render);
+areaSel.addEventListener('change', render);
 document.getElementById('timeFilter').addEventListener('change', render);
 document.getElementById('sortSelect').addEventListener('change', render);
 document.getElementById('scoreFilter').addEventListener('change', render);
